@@ -1,0 +1,398 @@
+<script>
+    // API 서버 기본 URL 설정
+    window.API_BASE_URL = 'http://localhost:8000';
+
+    // 디바운스 함수 추가
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    // 마지막 동기화 시간 저장
+    let lastSyncTime = 0;
+    const SYNC_INTERVAL = 5000; // 5초
+
+    // 전역 변수로 초기화 상태 관리
+    let isInitialized = false;
+
+    // MBTI 상태 초기화 함수
+    async function initializeMBTIState() {
+        try {
+            if (isInitialized) return Promise.resolve();
+            
+            console.log('=== MBTI 상태 초기화 시작 ===');
+            
+            // 로그인 상태 확인
+            const isLoggedIn = document.body.classList.contains('loggedin');
+            console.log('로그인 상태:', isLoggedIn);
+            
+            // 현재 사용자 이메일 확인
+            const currentEmail = window.MEMBER_EMAIL || window.MEMBER_UID;
+            console.log('현재 사용자 이메일:', currentEmail);
+            
+            if (isLoggedIn && currentEmail) {
+                try {
+                    await syncUserInfo(currentEmail, true);
+                } catch (syncError) {
+                    console.error('동기화 실패:', syncError);
+                }
+            } else {
+                console.log('로그인 상태가 아니거나 이메일 정보를 찾을 수 없음');
+                localStorage.setItem('userMBTIResult', 'MBTI');
+                await updateNavBar('MBTI');
+            }
+        } catch (error) {
+            console.error('MBTI 상태 초기화 중 예외 발생:', error);
+        } finally {
+            isInitialized = true;
+            console.log('=== MBTI 상태 초기화 완료 ===');
+            return Promise.resolve();
+        }
+    }
+
+    // MBTI 결과를 화면에 표시하는 함수
+    function displayMBTIResult() {
+        const mbtiElements = document.querySelectorAll('#user_mbti');
+        const mbtiResult = localStorage.getItem('userMBTIResult');
+        
+        console.log('displayMBTIResult 실행됨');
+        console.log('저장된 MBTI 결과:', mbtiResult);
+        
+        mbtiElements.forEach(mbtiElement => {
+            if (mbtiResult && mbtiResult !== 'null' && mbtiResult !== 'undefined') {
+                mbtiElement.textContent = mbtiResult;
+                const parentLink = mbtiElement.closest('a');
+                if (parentLink) {
+                    parentLink.href = `/result?result=${mbtiResult}`;
+                }
+            } else {
+                mbtiElement.textContent = 'MBTI 검사하기';
+                const parentLink = mbtiElement.closest('a');
+                if (parentLink) {
+                    parentLink.href = '/test-start';
+                }
+            }
+        });
+    }
+
+    // 사용자 정보 동기화 함수
+    async function syncUserInfo(email, force = false) {
+        try {
+            console.log('동기화 시도:', {
+                email: email,
+                mbti: localStorage.getItem('userMBTIResult')
+            });
+
+            // 이메일이 유효한지 확인
+            if (!email || email === 'undefined' || email === 'null') {
+                console.log('유효하지 않은 이메일:', email);
+                return null;
+            }
+
+            const response = await fetch(`${window.API_BASE_URL}/mbti/result`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                mode: 'cors',
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    email: email,
+                    result: localStorage.getItem('userMBTIResult') || null
+                })
+            });
+            
+            // 응답 상태 확인
+            console.log('API 응답 상태:', response.status);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.log('API 에러 응답:', errorText);
+                throw new Error(errorText || 'API 요청 실패');
+            }
+            
+            const data = await response.json();
+            console.log('API 응답 데이터:', data);
+            return data;
+        } catch (error) {
+            console.error('동기화 실패 상세:', error);
+            throw error;
+        }
+    }
+
+    // 이메일 요소를 찾는 함수
+    function waitForEmailElement(maxAttempts = 10, interval = 500) {
+        return new Promise((resolve) => {
+            let attempts = 0;
+            
+            const checkElement = () => {
+                const emailElements = document.querySelectorAll('.member-info .email-info');
+                if (emailElements.length > 0) {
+                    resolve(emailElements[0].textContent.trim());
+                } else if (attempts >= maxAttempts) {
+                    resolve(null);
+                } else {
+                    attempts++;
+                    setTimeout(checkElement, interval);
+                }
+            };
+            
+            checkElement();
+        });
+    }
+
+    // MBTI 결과 저장 함수
+    async function saveMBTIResult(email, mbtiResult) {
+        try {
+            const response = await fetch(`${window.API_BASE_URL}/users/sync`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: email,
+                    new_mbti: mbtiResult
+                })
+            });
+
+            const data = await response.json();
+            
+            if (response.ok) {
+                localStorage.setItem('userMBTIResult', mbtiResult);
+                updateNavBar(mbtiResult);
+                return data;
+            }
+            return null;
+        } catch (e) {
+            // 에러 발생해도 조용히 처리
+            return null;
+        }
+    }
+
+    // MBTI 결과 저장 후 처리 함수
+    async function handleMBTIResult(email, result) {
+        try {
+            console.log('=== MBTI 결과 처리 시작 ===');
+            localStorage.setItem('userMBTIResult', result);
+            updateNavBar(result);
+            
+            // 서버에 결과 저장
+            await saveMBTIResult(email, result);
+        } catch (error) {
+            console.error('MBTI 결과 처리 실패:', error);
+        }
+    }
+
+    // DOM 변경 감지 함수 (디바운스 적용)
+    const debouncedDisplayMBTI = debounce(() => {
+        const mbtiElements = document.querySelectorAll('#user_mbti');
+        if (mbtiElements.length > 0) {
+            displayMBTIResult();
+        }
+    }, 100);
+
+    // 로그인 상태 변경 감지 및 처리 함수
+    async function checkLoginState() {
+        const emailElements = document.querySelectorAll('.member-info .email-info');
+        
+        if (emailElements.length > 0) {
+            const currentEmail = emailElements[0].textContent.trim();
+            const syncedEmail = localStorage.getItem('syncedEmail');
+            
+            console.log('로그인 상태 체크:', { currentEmail, syncedEmail });
+            
+            // 새로운 로그인 감지 또는 재로그인
+            if (currentEmail && (!syncedEmail || currentEmail !== syncedEmail)) {
+                console.log('로그인 감지, 사용자 정보 동기화 시작');
+                try {
+                    await syncUserInfo(currentEmail, true);  // 강제 동기화
+                    localStorage.setItem('syncedEmail', currentEmail);
+                } catch (error) {
+                    console.error('로그인 후 동기화 실패:', error);
+                }
+            }
+        } else {
+            // 로그아웃 상태
+            if (localStorage.getItem('syncedEmail')) {
+                console.log('로그아웃 감지, localStorage 정리');
+                localStorage.clear();  // 모든 데이터 삭제
+            }
+        }
+    }
+
+    // Observer 수정
+    const observer = new MutationObserver((mutations) => {
+        let shouldCheckLogin = false;
+        let shouldUpdateMBTI = false;
+
+        mutations.forEach((mutation) => {
+            if (mutation.addedNodes.length || mutation.removedNodes.length) {
+                // 이메일 정보 변경 감지
+                const hasEmailInfo = Array.from(mutation.addedNodes).some(node => {
+                    return node.nodeType === 1 && (
+                        node.classList?.contains('email-info') ||
+                        node.querySelector('.email-info')
+                    );
+                });
+                
+                // MBTI 엘리먼트 변경 감지
+                const hasUserMbti = Array.from(mutation.addedNodes).some(node => {
+                    return node.nodeType === 1 && (
+                        node.id === 'user_mbti' ||
+                        node.querySelector('#user_mbti')
+                    );
+                });
+
+                if (hasEmailInfo) shouldCheckLogin = true;
+                if (hasUserMbti) shouldUpdateMBTI = true;
+            }
+        });
+
+        if (shouldCheckLogin) {
+            checkLoginState();
+        }
+        if (shouldUpdateMBTI) {
+            debouncedDisplayMBTI();
+        }
+    });
+
+    // 윈도우 로드 이벤트 핸들러 수정
+    window.addEventListener('load', async () => {
+        console.log('윈도우 로드 시작');
+        try {
+            await initializeMBTIState();
+            console.log('MBTI 초기화 완료, 다음 스크립트 실행');
+            
+            // agency_list_with_db.html의 초기화 함수들 호출
+            if (typeof initializeMbtiFilter === 'function') {
+                initializeMbtiFilter();
+                console.log('MBTI 필터 초기화 완료');
+            }
+            
+            if (typeof initializeFilters === 'function') {
+                initializeFilters();
+                console.log('필터 이벤트 리스너 설정 완료');
+            }
+            
+            if (typeof displayFilteredAgencies === 'function') {
+                await displayFilteredAgencies();
+                console.log('에이전시 목록 표시 완료');
+            }
+        } catch (error) {
+            console.error('초기화 중 오류:', error);
+        }
+    });
+
+    // 페이지 로드 시 초기화
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('DOM 로드 완료');
+        initializeMBTIState();
+    });
+
+    // 페이지 완전 로드 시 실행 (이미지 등 모든 리소스 로드 후)
+    window.addEventListener('load', () => {
+        console.log('페이지 완전 로드');
+        initializeMBTIState();
+    });
+
+    // 페이지 가시성 변경 시 실행
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            console.log('페이지 가시성 변경');
+            initializeMBTIState();
+        }
+    });
+
+    // 로그인 모달 닫힘 이벤트 리스너 추가
+    document.addEventListener('hidden.bs.modal', function (event) {
+        if (event.target.id === 'loginModal') {
+            console.log('로그인 모달 닫힘, 상태 체크');
+            checkLoginState();
+        }
+    });
+
+    // nav 바 업데이트 함수 수정
+    function updateNavBar(mbtiResult) {
+        console.log('=== Nav 바 업데이트 시도 ===');
+        console.log('MBTI 결과:', mbtiResult);
+        
+        const mbtiElements = document.querySelectorAll('#user_mbti');
+        if (mbtiElements.length === 0) {
+            console.log('Nav 바 요소를 찾을 수 없음');
+            return;
+        }
+        
+        mbtiElements.forEach(element => {
+            element.textContent = mbtiResult || 'MBTI 검사하기';
+            
+            const parentLink = element.closest('a');
+            if (parentLink) {
+                parentLink.href = mbtiResult ? `/result?result=${mbtiResult}` : '/test-start';
+            }
+        });
+        
+        console.log('Nav 바 업데이트 완료');
+    }
+
+    // 기존 observer 수정
+    const existingObserver = document.querySelector('script[data-observer="true"]');
+    if (!existingObserver) {
+        // 기존 observer 로직 유지하면서 MBTI 상태 체크 추가
+        observer.disconnect();
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: false,
+            characterData: false
+        });
+    }
+
+    // 페이지 로드 이벤트
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('DOM 로드 완료');
+        initializeMBTIState();
+    });
+
+    // 페이지 가시성 변경 이벤트
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            console.log('페이지 가시성 변경');
+            initializeMBTIState();
+        }
+    });
+
+    // 스크립트가 이미 로드되었음을 표시
+    document.currentScript.setAttribute('data-observer', 'true');
+
+    // 페이지 완전 로드 시 MBTI 결과 저장
+    window.onload = async function() {
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const mbtiResult = urlParams.get('result');
+            
+            if (mbtiResult) {
+                const emailElements = document.querySelectorAll('.member-info .email-info');
+                if (emailElements.length > 0) {
+                    const email = emailElements[0].textContent.trim();
+                    await saveMBTIResult(email, mbtiResult);
+                }
+            }
+        } catch (e) {
+            // 에러 발생해도 조용히 처리
+        }
+    };
+</script> 
+
+<style>
+    .dspn {
+        display: none;
+    }
+</style>

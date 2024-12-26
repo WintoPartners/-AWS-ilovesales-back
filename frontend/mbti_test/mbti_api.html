@@ -1,0 +1,95 @@
+<script>
+    // API 서버 기본 URL 설정 (window 객체에 할당)
+    window.API_BASE_URL = 'http://localhost:8000';  // 실제 서버 주소로 수정 필요
+
+    // URL에서 MBTI 결과 가져오기
+    function getMBTIFromURL() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('result');
+    }
+
+    // MBTI 결과 저장 함수 (재시도 로직 포함)
+    async function saveMBTIResult(mbtiResult, retryCount = 0, maxRetries = 5) {
+        try {
+            console.log('새로운 MBTI 결과:', mbtiResult, '시도 횟수:', retryCount + 1);
+            
+            const currentEmail = window.MEMBER_EMAIL || window.MEMBER_UID;
+            if (!currentEmail) {
+                console.log('로그인된 사용자 정보를 찾을 수 없음');
+                return;
+            }
+            
+            console.log('MBTI 결과 저장 시도:', currentEmail, mbtiResult);
+            
+            const response = await fetch(`${window.API_BASE_URL}/mbti/result`, {
+                method: 'POST',
+                headers: {
+                    'accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.ACCESS_TOKEN}`
+                },
+                body: JSON.stringify({
+                    "email": currentEmail,
+                    "result": mbtiResult
+                }),
+                credentials: 'include'
+            });
+            
+            const responseData = await response.json();
+            
+            if (!response.ok) {
+                console.error('MBTI 결과 저장 실패:', response.status, responseData);
+                
+                // 회원을 찾을 수 없는 경우 재시도
+                if (response.status === 404 && retryCount < maxRetries) {
+                    console.log(`${retryCount + 1}번째 시도 실패, 1초 후 재시도...`);
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // 3초 대기
+                    return saveMBTIResult(mbtiResult, retryCount + 1, maxRetries);
+                }
+            } else {
+                console.log('MBTI 결과 저장 성공:', responseData);
+            }
+            
+        } catch (error) {
+            console.error('MBTI 결과 저장 중 오류:', error);
+            
+            // 네트워크 오류 등의 경우에도 재시도
+            if (retryCount < maxRetries) {
+                console.log(`${retryCount + 1}번째 시도 실패, 1초 후 재시도...`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                return saveMBTIResult(mbtiResult, retryCount + 1, maxRetries);
+            }
+        }
+    }
+
+    // 페이지 로드 시 실행
+    window.onload = async function() {
+        const mbtiResult = getMBTIFromURL();
+        if (mbtiResult) {
+            // 즉시 로컬 스토리지 업데이트
+            localStorage.setItem('userMBTIResult', mbtiResult);
+            // 화면 업데이트
+            displayMBTIResult();
+            // 서버에 저장 (재시도 로직 포함)
+            await saveMBTIResult(mbtiResult);
+        }
+    };
+
+    // MBTI 결과를 화면에 표시하는 함수
+    function displayMBTIResult() {
+        const mbtiResult = localStorage.getItem('userMBTIResult');
+        if (!mbtiResult) return;
+
+        console.log('화면에 MBTI 표시:', mbtiResult);
+        
+        const mbtiElements = document.querySelectorAll('#user_mbti');
+        mbtiElements.forEach(element => {
+            element.textContent = mbtiResult;
+            
+            const parentLink = element.closest('a');
+            if (parentLink) {
+                parentLink.href = `/result?result=${mbtiResult}`;
+            }
+        });
+    }
+</script>

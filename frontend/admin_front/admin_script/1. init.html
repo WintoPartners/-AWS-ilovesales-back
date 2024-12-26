@@ -1,0 +1,77 @@
+<script>
+    // 기본 설정
+    //window.API_BASE_URL = 'https://api.ilovesales.site:8000';
+    const API_BASE = window.API_BASE_URL + '/agency';
+    const IMWEB_API_BASE = 'https://api.imweb.me/v2/shop/products';
+    const IMWEB_IMG_BASE = 'https://cdn-optimized.imweb.me/upload/';
+
+    // 페이지 로드 시 초기화
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('페이지 로드됨');
+        const agencies = loadPageAgencies();
+        console.log('초기 에이전시 목록:', agencies);
+        
+        // 필터 이벤트 리스너 설정
+        document.getElementById('categoryFilter').addEventListener('change', displayFilteredAgencies);
+        document.getElementById('locationFilter').addEventListener('change', displayFilteredAgencies);
+        document.getElementById('mbtiFilter').addEventListener('change', displayFilteredAgencies);
+        
+        // 대카테고리 변경 이벤트 리스너
+        document.getElementById('mainCategorySelect').addEventListener('change', (e) => {
+            updateSubCategories(e.target.value);
+        });
+        
+        // 초렉트 박스 초기화 추가
+        initializeSelects();
+        initializeHistorySelect();
+        
+        // 초기 목록 표시
+        displayFilteredAgencies();
+    });
+
+    // 셀렉트 박스 초기화 함수들 추가
+    function initializeSelects() {
+        // MBTI 셀렉트 박스
+        const mbtiSelect = document.getElementById('mbtiSelect');
+        Object.keys(MBTI_MAP).forEach(mbti => {
+            const option = document.createElement('option');
+            option.value = mbti;
+            option.textContent = mbti;
+            mbtiSelect.appendChild(option);
+        });
+
+        // 대카테고리 셀렉트 박스
+        const mainCategorySelect = document.getElementById('mainCategorySelect');
+        Object.keys(CATEGORY_MAP).forEach(category => {
+            const option = document.createElement('option');
+            option.value = CATEGORY_MAP[category];
+            option.textContent = category;
+            mainCategorySelect.appendChild(option);
+        });
+    }
+
+    function initializeHistorySelect() {
+        const historySelect = document.getElementById('historySelect');
+        Object.entries(HISTORY_YEAR_MAP).forEach(([label, value]) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            historySelect.appendChild(option);
+        });
+    }
+    function switchTab(tabId) {
+    // 모든 탭 버튼에서 active 클래스 제거
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.classList.remove('active');
+    });
+    
+    // 모든 탭 컨텐츠에서 active 클래스 제거
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('active');
+        });
+        
+        // 선택된 탭 활성화
+        document.querySelector(`button[onclick="switchTab('${tabId}')"]`).classList.add('active');
+        document.getElementById(`${tabId}Tab`).classList.add('active');
+    }
+</script> 
