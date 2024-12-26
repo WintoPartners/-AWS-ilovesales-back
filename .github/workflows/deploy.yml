@@ -1,4 +1,4 @@
-name: Deploy to AWS Elastic Beanstalk
+name: ilovesales-backend Deploy to AWS Elastic Beanstalk
 
 on:
   push:
@@ -16,9 +16,6 @@ jobs:
       
     - name: Deploy to EB
       uses: einaregilsson/beanstalk-deploy@v21
-      env:
-        IMWEB_API_KEY: ${{ secrets.IMWEB_API_KEY }}
-        IMWEB_SECRET_KEY: ${{ secrets.IMWEB_SECRET_KEY }}
       with:
         aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -28,3 +25,6 @@ jobs:
         deployment_package: deploy.zip
         version_label: ${{ github.sha }}
         use_existing_version_if_available: false
+        environment_variables: |
+          IMWEB_API_KEY=${{ secrets.IMWEB_API_KEY }}
+          IMWEB_SECRET_KEY=${{ secrets.IMWEB_SECRET_KEY }}
